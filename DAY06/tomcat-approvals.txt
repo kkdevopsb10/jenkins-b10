@@ -1,0 +1,104 @@
+
+node {
+
+    echo "Job Name: ${env.JOB_NAME}"
+    echo "Build Number: ${env.BUILD_NUMBER}"
+
+    def mavenHome = tool name: "maven-3.9.16"
+
+    try {
+
+        stage('Git Checkout') {
+            notifyBuild('STARTED')
+
+            git branch: 'master',
+                url: 'https://github.com/kkdevopsb10/maven-webapplication-project-kkfunda.git'
+        }
+
+        stage('Compile') {
+            sh "${mavenHome}/bin/mvn compile"
+        }
+
+        stage('Build') {
+            sh "${mavenHome}/bin/mvn clean package"
+        }
+
+        /*
+        stage('SonarQube Analysis') {
+            withSonarQubeEnv('sonar') {
+                sh """
+                    ${mavenHome}/bin/mvn \
+                    org.sonarsource.scanner.maven:sonar-maven-plugin:sonar
+                """
+            }
+        }
+        */
+
+        stage('Deploy Artifact to Maven Repository') {
+            sh "${mavenHome}/bin/mvn deploy"
+        }
+
+        stage('Approval for Tomcat Deployment') {
+
+            input(
+                message: 'Do you want to deploy this build to Tomcat?',
+                ok: 'Deploy'
+            )
+        }
+
+        stage('Deploy to Tomcat') {
+
+            sh """
+                curl -u kk:password \
+                --upload-file "${WORKSPACE}/target/maven-web-application.war" \
+                "http://13.235.77.122:8080/manager/text/deploy?path=/maven-web-application&update=true"
+            """
+        }
+
+        currentBuild.result = 'SUCCESS'
+
+    } catch (Exception e) {
+
+        currentBuild.result = 'FAILURE'
+
+        echo "Pipeline Failed: ${e.getMessage()}"
+
+        throw e
+
+    } finally {
+
+        notifyBuild(currentBuild.result)
+    }
+}
+
+
+def notifyBuild(String buildStatus = 'STARTED') {
+
+    buildStatus = buildStatus ?: 'SUCCESS'
+
+    def colorCode = '#FF0000'
+
+    def subject = "${buildStatus}: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]'"
+
+    def summary = "${subject} (${env.BUILD_URL})"
+
+    if (buildStatus == 'STARTED') {
+
+        colorCode = '#FFFF00'
+
+    } else if (buildStatus == 'SUCCESS') {
+
+        colorCode = '#27F568'
+
+    } else {
+
+        colorCode = '#FF0000'
+    }
+
+    slackSend(
+        color: colorCode,
+        message: summary,
+        channel: '#airtel-project'
+    )
+}
+
