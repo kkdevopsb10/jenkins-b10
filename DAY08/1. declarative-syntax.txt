@@ -1,0 +1,23 @@
+//declarative-way-PL
+
+pipeline {
+    agent any
+
+    stages {
+        stage('First') {
+            steps {
+                echo 'First stage'
+            }
+        }
+          stage('Second') {
+            steps {
+                echo 'Second stage'
+            }
+        }
+         stage('Third') {
+            steps {
+                echo 'Third stage'
+            }
+        }
+    } //stages ending
+}  //pipeline ending
