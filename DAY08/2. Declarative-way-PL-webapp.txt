@@ -1,0 +1,64 @@
+
+pipeline 
+{
+  agent any
+  tools
+  {
+    maven "maven-3.9.16"
+  }
+  stages
+  {
+    stage('git checkout')
+    {
+      steps
+      {
+      git branch: 'master', url: 'https://github.com/kkdevopsb10/maven-webapplication-project-kkfunda.git'
+      }
+    }
+    stage('COMPILE')
+    {
+      steps
+      {
+        sh "mvn compile"
+      }
+    }
+   stage('Build')
+    {
+      steps
+      {
+        sh "mvn clean package"
+      }
+    }
+    stage('SQ Report')
+    {
+      steps
+      {
+        sh "mvn sonar:sonar"
+      }
+    }
+   stage('Articat Backup')
+    {
+      steps
+      {
+        sh "mvn deploy"
+      }
+    }
+   stage('Deploy To Tomcat')
+    {
+      steps
+      {
+        sh """
+
+      curl -u kk:password \
+--upload-file /var/lib/jenkins/workspace/Declarative-PL-webapp/target/maven-web-application.war \
+"http://65.0.183.199:8080/manager/text/deploy?path=/maven-web-application&update=true"
+          
+        """
+      }
+    }
+
+
+
+  } //stages ending
+    
+} //pipeline ending
