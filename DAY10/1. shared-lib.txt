@@ -1,0 +1,249 @@
+blog url: https://blog.kkdevops.com/jenkins-ci-cd-upstream-downstream-triggers-parallel-execution-shared-libraries/
+
+master-slave blog: https://blog.kkdevops.com/jenkins-master-slave-architecture-2/
+
+
+jenkins shared libararies
+==========================
+
+Def: A Jenkins Shared Library is a collection of reusable pipeline scripts, functions, and other code components that can be used across multiple Jenkins pipelines. This  approach helps in maintaining and updating code in a single place rather than duplicating it across multiple Jenkinsfiles.
+
+Components of Shared Libraries
+------------------------------
+
+Library Structure:
+
+vars/: Contains Groovy scripts that define global variables or functions. These can be accessed directly in the Jenkinsfile.
+
+src/: Contains Groovy classes that can be used in your pipeline. Typically, this is used for more complex functionality and encapsulated logic.
+
+resources/: Stores non-Groovy files that you want to use in your library, such as configuration files.
+
+
+Example Shared Library Structure
+--------------------------------
+my-shared-library/
+├── vars/
+│   └── myUtils.groovy
+├── src/
+│   └── com/
+│       └── example/
+│           └── MyClass.groovy
+└── resources/
+    └── config/
+        └── myConfig.json
+
+vars/myUtils.groovy:
+--------------------
+
+def call(String name) {
+    echo "Hello, ${name}!"
+}
+
+
+src/com/example/MyClass.groovy:
+-------------------------------
+
+package com.example
+class MyClass {
+    static void greet(String name) {
+        echo "Hello, ${name}!"
+    }
+}
+
+resources/config/myConfig.json:
+--------------------------------
+{
+    "key": "value"
+}
+
+
+How to setup?
+=============
+
+step 1: create a sharedlibrary repo in github and update the common code.
+
+step 2: take the github url
+
+https://github.com/kkdevopsb10/Sharedlib-kkfunda.git
+
+jenkins dashboard --> manage jenkins --> system configuration --> system --> search "global pipeline libraries"
+
+Name: SharedLibKKFunda
+
+default version: main ---> branch name
+
+source code management: git
+project repository: github url
+password: github password
+
+
+--> save
+
+
+step 3: How to access the shared library
+------
+
+--> select pipeline job --> configure --> 
+
+pipeline {
+    agent any
+
+    tools {
+        maven "maven-3.9.16"
+    }
+
+    stages {
+        stage('Git Checkout') {
+            steps {
+                git branch: 'master', url: 'https://github.com/kkdevopsb10/maven-webapplication-project-kkfunda.git'
+            }
+        }
+
+        stage('Compile') {
+            steps {
+                sh "mvn clean compile"
+            }
+        }
+
+        stage('Build') {
+            steps {
+                sh "mvn package"
+            }
+        }
+
+        stage('SonarQube Report') {
+            steps {
+                sh "mvn sonar:sonar"
+            }
+        }
+
+        stage('Deploy to Nexus') {
+            steps {
+                sh "mvn deploy"
+            }
+        }
+
+        stage('Deploy to Tomcat') {
+            steps {
+               sh """
+
+      curl -u kk:password \
+--upload-file /var/lib/jenkins/workspace/shared-lib-pipeline-test/target/maven-web-application.war \
+"http://3.110.117.18:8080/manager/text/deploy?path=/maven-web-application&update=true"
+          
+        """
+            }
+        }
+    }
+
+    post {
+        success {
+            script {
+                sendSlackNotifications(currentBuild.result)
+            }
+        }
+
+        failure {
+            script {
+                sendSlackNotifications(currentBuild.result)
+            }
+        }
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+step 4:
+=======
+
+@Library('SharedLibSlack') _
+
+pipeline {
+    agent any
+
+    tools {
+        maven "maven-3.9.9"
+    }
+
+    stages {
+        stage('Git Checkout') {
+            steps {
+                git branch: 'development', url: 'https://github.com/kkdevopsb5/maven-webapplication-project-kkfunda.git'
+            }
+        }
+
+        stage('Compile') {
+            steps {
+                sh "mvn clean compile"
+            }
+        }
+
+        stage('Build') {
+            steps {
+                sh "mvn package"
+            }
+        }
+
+        stage('SonarQube Report') {
+            steps {
+                sh "mvn sonar:sonar"
+            }
+        }
+
+        stage('Deploy to Nexus') {
+            steps {
+                sh "mvn deploy"
+            }
+        }
+
+        stage('Deploy to Tomcat') {
+            steps {
+                sh """
+                    curl -u kk:password \\
+                    --upload-file target/maven-web-application.war \\
+                    "http://3.109.2.100:9090/manager/text/deploy?path=/maven-web-application&update=true"
+                """
+            }
+        }
+    }
+
+    post {
+        success {
+            script {
+                sendSlackNotifications(currentBuild.result)
+            }
+        }
+
+        failure {
+            script {
+                sendSlackNotifications(currentBuild.result)
+            }
+        }
+    }
+}
+
+
+
+=================
+
+IQ] How to import multiple shared libraries?
+
+@Library('my-shared-library') _
+/* Using a version specifier, such as branch, tag, etc */
+@Library('my-shared-lib-2') _
+@Library('my-shared-lib-3') _
+
+
+
+
+/* Accessing multiple libraries with one statement */
+@Library(['my-shared-library', 'otherlib@abc1234', 'thirdlibName']) _
